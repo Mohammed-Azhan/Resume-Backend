@@ -3,3 +3,11 @@ uvicorn
 python-multipart
 PyMuPDF
 python-docx
+google-generativeai
+sqlalchemy
+python-dotenv
+spacy
+language-tool-python
+textstat
+pydantic
+psycopg2-binary

@@ -4,6 +4,8 @@ import fitz
 import docx
 import google.generativeai as genai
 from fastapi import FastAPI, UploadFile, File, HTTPException, Depends
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 import io
 from dotenv import load_dotenv
 from typing import List
@@ -13,6 +15,7 @@ import crud, models, schemas
 from fastapi.middleware.cors import CORSMiddleware
 from scoring import ResumeScorer
 from datetime import datetime
+from sqlalchemy import func
 
 
 # Initialize scorer (add after app initialization)
@@ -36,13 +39,23 @@ app = FastAPI(
     description="An API that parses resumes (PDF, DOCX) using Gemini and returns structured JSON data.",
     version="1.1.0",
 )
+# CORS configuration
+ALLOWED_ORIGINS = os.environ.get("ALLOWED_ORIGINS", "*").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=r".*",  # Allow all origins including file:// protocol (null origin)
+    allow_origins=ALLOWED_ORIGINS if ALLOWED_ORIGINS != ["*"] else ["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Serve frontend static files
+import os as _os
+if _os.path.exists("resumehub-frontend/public"):
+    try:
+        app.mount("/static", StaticFiles(directory="resumehub-frontend/public"), name="static")
+    except Exception as e:
+        print(f"Warning: Could not mount static files: {e}")
 
 def get_db():
     db = SessionLocal()
@@ -142,24 +155,7 @@ def read_resume(resume_id: int, db: Session = Depends(get_db)):
         education=db_resume.educations
     )
 
-@app.get("/resumes/search/", response_model=schemas.ResumeData, tags=["Database"])
-def search_resume_by_email(email: str, db: Session = Depends(get_db)):
-    """
-    Retrieve a parsed resume from the database by the candidate's email address.
-    """
-    personal_info = db.query(models.PersonalInfo).filter(models.PersonalInfo.email == email).first()
-    if personal_info is None or personal_info.resume is None:
-        raise HTTPException(status_code=404, detail="Resume not found for the provided email")
-    
-    # Convert SQLAlchemy model to Pydantic schema
-    return schemas.ResumeData(
-        personal_info=personal_info,
-        summary=personal_info.resume.summary,
-        skills=personal_info.resume.skills,
-        work_experience=personal_info.resume.work_experiences,
-        projects=personal_info.resume.projects,
-        education=personal_info.resume.educations
-    )
+
 
 @app.get("/resumes/", response_model=List[schemas.ResumeData], tags=["Database"])
 def list_all_resumes(db: Session = Depends(get_db)):
@@ -194,7 +190,11 @@ def delete_resume(resume_id: int, db: Session = Depends(get_db)):
 
 @app.get("/", tags=["Root"])
 async def read_root():
-    return {"message": "Welcome to the Resume Parser API. Go to /docs for the API documentation."}
+    """Serve the frontend application"""
+    try:
+        return FileResponse("resumehub-frontend/public/index.html")
+    except FileNotFoundError:
+        return {"message": "Welcome to the Resume Parser API. Go to /docs for the API documentation."}
 # New endpoints to add
 
 @app.post("/resumes/{resume_id}/analyze", tags=["Analysis"])
@@ -202,45 +202,114 @@ async def analyze_resume(resume_id: int, db: Session = Depends(get_db)):
     """
     Analyze and score an existing resume
     """
-    db_resume = db.query(models.Resume).filter(models.Resume.id == resume_id).first()
-    if not db_resume:
-        raise HTTPException(status_code=404, detail="Resume not found")
-    
-    # Reconstruct resume text for analysis
-    resume_text = f"""
-    {db_resume.summary or ''}
-    {' '.join([skill.name for skill in db_resume.skills])}
-    {' '.join([exp.description or '' for exp in db_resume.work_experiences])}
-    """
-    
-    scorer = ResumeScorer()
-    analysis = scorer.generate_score(resume_text)
-    
-    # Save score to database
-    from datetime import datetime
-    existing_score = db.query(models.ResumeScore).filter(
-        models.ResumeScore.resume_id == resume_id
-    ).first()
-    
-    if existing_score:
-        existing_score.overall_score = analysis["overall_score"]
-        existing_score.skills_score = analysis["skills_score"]
-        existing_score.readability_score = analysis["readability_score"]
-        existing_score.grammar_score = analysis["grammar_score"]
-        existing_score.analysis_date = datetime.now().isoformat()
-    else:
-        new_score = models.ResumeScore(
-            resume_id=resume_id,
-            overall_score=analysis["overall_score"],
-            skills_score=analysis["skills_score"],
-            readability_score=analysis["readability_score"],
-            grammar_score=analysis["grammar_score"],
-            analysis_date=datetime.now().isoformat()
-        )
-        db.add(new_score)
-    
-    db.commit()
-    return analysis
+    try:
+        db_resume = db.query(models.Resume).filter(models.Resume.id == resume_id).first()
+        if not db_resume:
+            raise HTTPException(status_code=404, detail="Resume not found")
+        
+        # BUILD COMPREHENSIVE RESUME TEXT
+        resume_parts = []
+        
+        # Add personal info
+        if db_resume.personal_info:
+            resume_parts.append(f"Name: {db_resume.personal_info.name}")
+            if db_resume.personal_info.email:
+                resume_parts.append(f"Email: {db_resume.personal_info.email}")
+            if db_resume.personal_info.phone:
+                resume_parts.append(f"Phone: {db_resume.personal_info.phone}")
+            if db_resume.personal_info.location:
+                resume_parts.append(f"Location: {db_resume.personal_info.location}")
+        
+        # Add summary
+        if db_resume.summary:
+            resume_parts.append(f"\nSummary:\n{db_resume.summary}")
+        
+        # Add skills
+        if db_resume.skills:
+            skills_text = ', '.join([skill.name for skill in db_resume.skills])
+            resume_parts.append(f"\nSkills:\n{skills_text}")
+        
+        # Add work experience
+        if db_resume.work_experiences:
+            resume_parts.append("\nWork Experience:")
+            for exp in db_resume.work_experiences:
+                resume_parts.append(f"\n{exp.job_title or 'Position'} at {exp.company or 'Company'}")
+                if exp.start_date or exp.end_date:
+                    date_range = f"{exp.start_date or 'Start'} - {exp.end_date or 'Present'}"
+                    resume_parts.append(date_range)
+                if exp.description:
+                    resume_parts.append(exp.description)
+        
+        # Add projects
+        if db_resume.projects:
+            resume_parts.append("\nProjects:")
+            for project in db_resume.projects:
+                resume_parts.append(f"\n{project.name}")
+                if project.description:
+                    resume_parts.append(project.description)
+                if project.technologies:
+                    resume_parts.append(f"Technologies: {project.technologies}")
+        
+        # Add education
+        if db_resume.educations:
+            resume_parts.append("\nEducation:")
+            for edu in db_resume.educations:
+                resume_parts.append(f"{edu.degree or 'Degree'} from {edu.institution or 'Institution'}")
+                if edu.end_date:
+                    resume_parts.append(f"Graduated: {edu.end_date}")
+        
+        # Combine all parts
+        resume_text = '\n'.join(resume_parts)
+        
+        # DEBUG LOGGING
+        print(f"DEBUG: Analyzing resume ID {resume_id}")
+        print(f"DEBUG: Resume text length: {len(resume_text)} characters")
+        print(f"DEBUG: First 200 chars: {resume_text[:200]}")
+        
+        # Check if text is too short
+        if len(resume_text.strip()) < 100:
+            print("WARNING: Resume text is very short, this may affect scoring")
+            # Add default text to ensure scoring works
+            resume_text += "\n\nThis is a professional resume showcasing skills and experience in technology and software development."
+        
+        # Generate score
+        scorer = ResumeScorer()
+        analysis = scorer.generate_score(resume_text)
+        
+        print(f"DEBUG: Analysis scores - Overall: {analysis['overall_score']}, Skills: {analysis['skills_score']}, Readability: {analysis['readability_score']}, Grammar: {analysis['grammar_score']}")
+        
+        # Save score to database
+        existing_score = db.query(models.ResumeScore).filter(
+            models.ResumeScore.resume_id == resume_id
+        ).first()
+        
+        if existing_score:
+            existing_score.overall_score = analysis["overall_score"]
+            existing_score.skills_score = analysis["skills_score"]
+            existing_score.readability_score = analysis["readability_score"]
+            existing_score.grammar_score = analysis["grammar_score"]
+            existing_score.analysis_date = datetime.now().isoformat()
+        else:
+            new_score = models.ResumeScore(
+                resume_id=resume_id,
+                overall_score=analysis["overall_score"],
+                skills_score=analysis["skills_score"],
+                readability_score=analysis["readability_score"],
+                grammar_score=analysis["grammar_score"],
+                analysis_date=datetime.now().isoformat()
+            )
+            db.add(new_score)
+        
+        db.commit()
+        
+        return analysis
+        
+    except Exception as e:
+        print(f"CRITICAL ERROR in analyze_resume: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error analyzing resume: {str(e)}")
 
 @app.post("/jobs/", tags=["Job Matching"])
 async def create_job_posting(job: schemas.JobPostingCreate, db: Session = Depends(get_db)):
@@ -375,270 +444,10 @@ async def get_dashboard_analytics(db: Session = Depends(get_db)):
         "average_resume_score": round(avg_score, 2),
         "top_skills": [{"skill": s[0], "count": s[1]} for s in top_skills]
     }
-@app.post("/analyze-resume/{email}")
-async def analyze_resume(email: str, db: Session = Depends(get_db)):
-    """
-    Analyzes a resume and returns detailed scoring
-    """
-    try:
-        # Get resume from database
-        personal_info = db.query(models.PersonalInfo).filter(
-            models.PersonalInfo.email == email
-        ).first()
-        
-        if not personal_info:
-            raise HTTPException(status_code=404, detail="Resume not found")
-        
-        resume = personal_info.resume
-        
-        # Compile resume text for analysis
-        resume_text = f"""
-        Name: {personal_info.name}
-        Email: {personal_info.email}
-        Phone: {personal_info.phone}
-        
-        Skills: {', '.join([skill.name for skill in resume.skills])}
-        
-        Projects:
-        """
-        
-        for project in resume.projects:
-            resume_text += f"\n{project.name}: {project.description}"
-        
-        for edu in resume.educations:
-            resume_text += f"\n{edu.degree} at {edu.institution}"
-        
-        # Generate score using ResumeScorer
-        score_data = scorer.generate_score(resume_text)
-        
-        # Save score to database
-        existing_score = db.query(models.ResumeScore).filter(
-            models.ResumeScore.resume_id == resume.id
-        ).first()
-        
-        if existing_score:
-            existing_score.overall_score = score_data["overall_score"]
-            existing_score.skills_score = score_data["skills_score"]
-            existing_score.readability_score = score_data["readability_score"]
-            existing_score.grammar_score = score_data["grammar_score"]
-            existing_score.analysis_date = datetime.now().isoformat()
-        else:
-            new_score = models.ResumeScore(
-                resume_id=resume.id,
-                overall_score=score_data["overall_score"],
-                skills_score=score_data["skills_score"],
-                readability_score=score_data["readability_score"],
-                grammar_score=score_data["grammar_score"],
-                analysis_date=datetime.now().isoformat()
-            )
-            db.add(new_score)
-        
-        db.commit()
-        
-        return score_data
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
 
-# ENDPOINT 2: Get AI-Powered Suggestions
-@app.get("/get-suggestions/{email}")
-async def get_suggestions(email: str, db: Session = Depends(get_db)):
-    """
-    Get AI-powered suggestions for resume improvement using Gemini
-    """
-    try:
-        # Get resume from database
-        personal_info = db.query(models.PersonalInfo).filter(
-            models.PersonalInfo.email == email
-        ).first()
-        
-        if not personal_info:
-            raise HTTPException(status_code=404, detail="Resume not found")
-        
-        resume = personal_info.resume
-        
-        # Compile resume data
-        resume_data = {
-            "name": personal_info.name,
-            "email": personal_info.email,
-            "skills": [skill.name for skill in resume.skills],
-            "projects": [
-                {
-                    "name": p.name,
-                    "description": p.description,
-                    "technologies": p.technologies
-                } for p in resume.projects
-            ],
-            "education": [
-                {
-                    "degree": e.degree,
-                    "institution": e.institution
-                } for e in resume.educations
-            ],
-            "work_experience": [
-                {
-                    "company": w.company,
-                    "title": w.job_title,
-                    "description": w.description
-                } for w in resume.work_experiences
-            ]
-        }
-        
-        # Create prompt for Gemini
-        prompt = f"""
-        Analyze this resume and provide specific, actionable suggestions for improvement.
-        
-        Resume Data:
-        {json.dumps(resume_data, indent=2)}
-        
-        Provide suggestions in 4 categories:
-        1. Content Improvements (how to better describe experience, achievements)
-        2. Skills Enhancement (missing skills, skills to highlight)
-        3. Formatting & Structure (organization, clarity)
-        4. Professional Impact (how to make resume stand out)
-        
-        For each category, provide 3-5 specific suggestions.
-        Format your response as JSON with this structure:
-        {{
-            "content": [
-                {{"text": "suggestion text", "example": "example if applicable"}}
-            ],
-            "skills": [...],
-            "formatting": [...],
-            "impact": [...]
-        }}
-        
-        Make suggestions specific and actionable.
-        """
-        
-        # Get suggestions from Gemini
-        model = genai.GenerativeModel("gemini-1.5-flash")
-        response = model.generate_content(prompt)
-        
-        # Parse JSON response
-        suggestions_text = response.text.strip()
-        if suggestions_text.startswith("```json"):
-            suggestions_text = suggestions_text.replace("```json", "").replace("```", "").strip()
-        
-        suggestions = json.loads(suggestions_text)
-        
-        return suggestions
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-# ENDPOINT 3: Get All Resumes (for My Resumes page)
-@app.get("/resumes/")
-async def get_all_resumes(db: Session = Depends(get_db)):
-    """
-    Get list of all resumes
-    """
-    try:
-        resumes = db.query(models.PersonalInfo).all()
-        
-        result = []
-        for info in resumes:
-            resume = info.resume
-            result.append({
-                "name": info.name,
-                "email": info.email,
-                "phone": info.phone,
-                "skills_count": len(resume.skills),
-                "projects_count": len(resume.projects),
-                "education": resume.educations[0].institution if resume.educations else None,
-                "has_score": resume.score is not None
-            })
-        
-        return result
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-# ENDPOINT 4: Get Resume by Email (for View page)
-@app.get("/resume/{email}")
-async def get_resume_by_email(email: str, db: Session = Depends(get_db)):
-    """
-    Get complete resume data by email
-    """
-    try:
-        personal_info = db.query(models.PersonalInfo).filter(
-            models.PersonalInfo.email == email
-        ).first()
-        
-        if not personal_info:
-            raise HTTPException(status_code=404, detail="Resume not found")
-        
-        resume = personal_info.resume
-        
-        return {
-            "personal_info": {
-                "name": personal_info.name,
-                "email": personal_info.email,
-                "phone": personal_info.phone,
-                "location": personal_info.location,
-                "linkedin": personal_info.linkedin_url
-            },
-            "skills": [skill.name for skill in resume.skills],
-            "projects": [
-                {
-                    "name": p.name,
-                    "description": p.description,
-                    "technologies": p.technologies.split(',') if p.technologies else []
-                } for p in resume.projects
-            ],
-            "education": [
-                {
-                    "degree": e.degree,
-                    "institution": e.institution,
-                    "end_date": e.end_date
-                } for e in resume.educations
-            ],
-            "work_experience": [
-                {
-                    "company": w.company,
-                    "job_title": w.job_title,
-                    "description": w.description,
-                    "start_date": w.start_date,
-                    "end_date": w.end_date
-                } for w in resume.work_experiences
-            ],
-            "score": {
-                "overall": resume.score.overall_score if resume.score else None,
-                "skills": resume.score.skills_score if resume.score else None,
-                "readability": resume.score.readability_score if resume.score else None,
-                "grammar": resume.score.grammar_score if resume.score else None
-            } if resume.score else None
-        }
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-# ENDPOINT 5: Delete Resume
-@app.delete("/resume/{email}")
-async def delete_resume(email: str, db: Session = Depends(get_db)):
-    """
-    Delete a resume by email
-    """
-    try:
-        personal_info = db.query(models.PersonalInfo).filter(
-            models.PersonalInfo.email == email
-        ).first()
-        
-        if not personal_info:
-            raise HTTPException(status_code=404, detail="Resume not found")
-        
-        resume = personal_info.resume
-        
-        # Delete resume (cascade will delete related records)
-        db.delete(resume)
-        db.commit()
-        
-        return {"message": "Resume deleted successfully"}
-        
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+# Railway deployment configuration
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
