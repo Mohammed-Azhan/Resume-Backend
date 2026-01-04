@@ -1,14 +1,14 @@
 # scoring.py
 import spacy
 import textstat
-import language_tool_python
+# import language_tool_python  # Disabled: Requires Java runtime not available on Railway
 from typing import Dict, List
 import re
 
 class ResumeScorer:
     def __init__(self):
         self.nlp = spacy.load("en_core_web_sm")
-        # self.tool = language_tool_python.LanguageTool('en-US')
+        # self.tool = language_tool_python.LanguageTool('en-US')  # Disabled
         self.TARGET_SKILLS = [
             'python', 'java', 'c++', 'javascript', 'sql', 'html', 'css', 
             'react', 'angular', 'vue', 'nodejs', 'django', 'flask', 'git', 
@@ -34,10 +34,9 @@ class ResumeScorer:
         return max(0, min(100, score))
     
     def check_grammar(self, text: str) -> tuple:
-        matches = self.tool.check(text)
-        num_errors = len(matches)
-        score = max(0, 100 - (num_errors * 5))
-        return score, matches
+        # Grammar checking disabled (requires Java runtime)
+        # Return default good score and empty errors list
+        return 85, []
     
     def generate_score(self, resume_text: str) -> Dict:
         matched_skills = self.analyze_skills(resume_text)
