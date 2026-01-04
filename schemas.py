@@ -60,3 +60,25 @@ class ResumeData(BaseModel):
         if v and hasattr(v[0], 'name'): # Check if it's a list of objects with a 'name' attribute
             return [skill.name for skill in v]
         return v
+
+
+from pydantic import BaseModel
+from typing import List, Optional
+
+class ResumeScoreSchema(BaseModel):
+    overall_score: int
+    skills_score: int
+    readability_score: int
+    grammar_score: int
+    analysis_date: str
+
+class JobPostingCreate(BaseModel):
+    title: str
+    company: str
+    description: str
+    required_skills: List[str]
+
+class ResumeJobMatchSchema(BaseModel):
+    match_score: int
+    matched_skills: List[str]
+    missing_skills: List[str]

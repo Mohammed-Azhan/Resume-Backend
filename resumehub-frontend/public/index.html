@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ResumeHub - AI Resume Intelligence</title>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="root"></div>
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // Simple SVG Icon Components
+        const Upload = ({ size = 24, className = "" }) => (
+            <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></svg>
+        );
+
+        const FileText = ({ size = 24, className = "" }) => (
+            <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /><line x1="10" y1="9" x2="8" y2="9" /></svg>
+        );
+
+        const BarChart3 = ({ size = 24, className = "" }) => (
+            <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="20" x2="12" y2="10" /><line x1="18" y1="20" x2="18" y2="4" /><line x1="6" y1="20" x2="6" y2="16" /></svg>
+        );
+
+        const Briefcase = ({ size = 24, className = "" }) => (
+            <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="7" width="20" height="14" rx="2" ry="2" /><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" /></svg>
+        );
+
+        const TrendingUp = ({ size = 24, className = "" }) => (
+            <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18" /><polyline points="17 6 23 6 23 12" /></svg>
+        );
+
+        const Eye = ({ size = 24, className = "" }) => (
+            <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
+        );
+
+        const Database = ({ size = 24, className = "" }) => (
+            <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><ellipse cx="12" cy="5" rx="9" ry="3" /><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" /><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" /></svg>
+        );
+
+        const Star = ({ size = 24, className = "" }) => (
+            <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></svg>
+        );
+
+        const Trash2 = ({ size = 24, className = "" }) => (
+            <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /><line x1="10" y1="11" x2="10" y2="17" /><line x1="14" y1="11" x2="14" y2="17" /></svg>
+        );
+
+        const Target = ({ size = 24, className = "" }) => (
+            <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="6" /><circle cx="12" cy="12" r="2" /></svg>
+        );
+
+        const CheckCircle = ({ size = 24, className = "" }) => (
+            <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" /></svg>
+        );
+
+        const AlertCircle = ({ size = 24, className = "" }) => (
+            <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>
+        );
+
+        const Lightbulb = ({ size = 24, className = "" }) => (
+            <svg width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18h6" /><path d="M10 22h4" /><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14" /></svg>
+        );
+
+        const API_BASE_URL = 'http://localhost:8000';
+
+        const ResumeHub = () => {
+            const [activeTab, setActiveTab] = useState('upload');
+            const [resumes, setResumes] = useState([]);
+            const [selectedResume, setSelectedResume] = useState(null);
+            const [uploadProgress, setUploadProgress] = useState(0);
+            const [analytics, setAnalytics] = useState(null);
+            const [loading, setLoading] = useState(false);
+            const [analysis, setAnalysis] = useState(null);
+            const [suggestions, setSuggestions] = useState([]);
+
+            useEffect(() => {
+                if (activeTab === 'resumes') {
+                    fetchResumes();
+                } else if (activeTab === 'analytics') {
+                    fetchAnalytics();
+                }
+            }, [activeTab]);
+
+            const fetchResumes = async () => {
+                try {
+                    const response = await fetch(`${API_BASE_URL}/resumes/`);
+                    const data = await response.json();
+                    setResumes(data);
+                } catch (error) {
+                    console.error('Error fetching resumes:', error);
+                }
+            };
+
+            const fetchAnalytics = async () => {
+                try {
+                    const response = await fetch(`${API_BASE_URL}/analytics/dashboard`);
+                    const data = await response.json();
+                    setAnalytics(data);
+                } catch (error) {
+                    console.error('Error fetching analytics:', error);
+                }
+            };
+
+            const handleFileUpload = async (event) => {
+                const file = event.target.files[0];
+                if (!file) return;
+
+                setLoading(true);
+                setUploadProgress(0);
+
+                const formData = new FormData();
+                formData.append('file', file);
+
+                try {
+                    const interval = setInterval(() => {
+                        setUploadProgress(prev => Math.min(prev + 10, 90));
+                    }, 200);
+
+                    const response = await fetch(`${API_BASE_URL}/parse-resume/`, {
+                        method: 'POST',
+                        body: formData,
+                    });
+
+                    clearInterval(interval);
+                    setUploadProgress(100);
+
+                    if (response.ok) {
+                        const data = await response.json();
+                        setSelectedResume(data);
+                        setTimeout(() => {
+                            setActiveTab('view');
+                        }, 500);
+                    } else {
+                        alert('Error uploading resume');
+                    }
+                } catch (error) {
+                    console.error('Error:', error);
+                    alert('Error uploading resume');
+                } finally {
+                    setLoading(false);
+                    setTimeout(() => setUploadProgress(0), 1000);
+                }
+            };
+
+            const analyzeResume = async (resumeId) => {
+                setLoading(true);
+                try {
+                    const response = await fetch(`${API_BASE_URL}/resumes/${resumeId}/analyze`, {
+                        method: 'POST'
+                    });
+                    const data = await response.json();
+                    setAnalysis(data);
+                    setActiveTab('analysis');
+                } catch (error) {
+                    console.error('Error analyzing resume:', error);
+                    alert('Error analyzing resume');
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            const getSuggestions = async (resumeId) => {
+                setLoading(true);
+                try {
+                    const response = await fetch(`${API_BASE_URL}/resumes/${resumeId}/suggestions`);
+                    const data = await response.json();
+                    setSuggestions(data);
+                    setActiveTab('suggestions');
+                } catch (error) {
+                    console.error('Error getting suggestions:', error);
+                    alert('Error getting suggestions');
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            const deleteResume = async (resumeId) => {
+                if (!confirm('Are you sure you want to delete this resume?')) return;
+
+                try {
+                    await fetch(`${API_BASE_URL}/resumes/${resumeId}`, {
+                        method: 'DELETE'
+                    });
+                    fetchResumes();
+                } catch (error) {
+                    console.error('Error deleting resume:', error);
+                }
+            };
+
+            return (
+                <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50">
+                    {/* Header */}
+                    <header className="bg-white/80 backdrop-blur-lg shadow-lg border-b border-purple-100">
+                        <div className="max-w-7xl mx-auto px-4 py-6">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center space-x-4">
+                                    <div className="w-14 h-14 bg-gradient-to-br from-purple-600 via-pink-600 to-indigo-600 rounded-2xl flex items-center justify-center shadow-xl transform hover:scale-105 transition">
+                                        <FileText className="text-white" size={32} />
+                                    </div>
+                                    <div>
+                                        <h1 className="text-4xl font-extrabold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">ResumeHub</h1>
+                                        <p className="text-sm text-gray-600 font-medium">AI-Powered Resume Intelligence Platform</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </header>
+
+                    {/* Navigation */}
+                    <nav className="bg-white/80 backdrop-blur-lg border-b border-purple-100 sticky top-0 z-10 shadow-md">
+                        <div className="max-w-7xl mx-auto px-4">
+                            <div className="flex space-x-1 overflow-x-auto">
+                                {[
+                                    { id: 'upload', icon: Upload, label: 'Upload' },
+                                    { id: 'resumes', icon: Database, label: 'My Resumes' },
+                                    { id: 'view', icon: Eye, label: 'View' },
+                                    { id: 'analysis', icon: BarChart3, label: 'Analysis' },
+                                    { id: 'suggestions', icon: Lightbulb, label: 'Suggestions' },
+                                    { id: 'analytics', icon: TrendingUp, label: 'Analytics' }
+                                ].map(tab => (
+                                    <button
+                                        key={tab.id}
+                                        onClick={() => setActiveTab(tab.id)}
+                                        className={`flex items-center space-x-2 px-6 py-4 border-b-2 transition-all ${activeTab === tab.id
+                                            ? 'border-purple-600 text-purple-600 bg-purple-50'
+                                            : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                                            }`}
+                                    >
+                                        <tab.icon size={20} />
+                                        <span className="font-semibold whitespace-nowrap">{tab.label}</span>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    </nav>
+
+                    {/* Main Content */}
+                    <main className="max-w-7xl mx-auto px-4 py-8">
+                        {/* Upload Tab */}
+                        {activeTab === 'upload' && (
+                            <div className="bg-white rounded-3xl shadow-2xl p-12 border border-purple-100">
+                                <div className="text-center">
+                                    <div className="w-28 h-28 bg-gradient-to-br from-purple-100 to-pink-100 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg">
+                                        <Upload className="text-purple-600" size={56} />
+                                    </div>
+                                    <h2 className="text-4xl font-bold text-gray-800 mb-4">Upload Your Resume</h2>
+                                    <p className="text-gray-600 mb-8 max-w-2xl mx-auto text-lg">
+                                        Upload your resume in PDF or DOCX format. Our AI will parse, analyze, and provide actionable insights.
+                                    </p>
+
+                                    <label className="relative inline-block">
+                                        <input
+                                            type="file"
+                                            accept=".pdf,.docx"
+                                            onChange={handleFileUpload}
+                                            className="hidden"
+                                            disabled={loading}
+                                        />
+                                        <div className="px-10 py-5 bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-600 text-white rounded-2xl cursor-pointer hover:shadow-2xl transition-all transform hover:scale-105 font-bold text-lg">
+                                            {loading ? 'Processing...' : 'Choose File'}
+                                        </div>
+                                    </label>
+
+                                    {uploadProgress > 0 && (
+                                        <div className="mt-8 max-w-md mx-auto">
+                                            <div className="bg-gray-200 rounded-full h-4 overflow-hidden shadow-inner">
+                                                <div
+                                                    className="bg-gradient-to-r from-purple-600 to-pink-600 h-full transition-all duration-300 shadow-lg"
+                                                    style={{ width: `${uploadProgress}%` }}
+                                                />
+                                            </div>
+                                            <p className="text-sm text-gray-600 mt-3 font-semibold">{uploadProgress}% Complete</p>
+                                        </div>
+                                    )}
+
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mt-16">
+                                        {[
+                                            { icon: FileText, title: 'Parse Resume', desc: 'Extract all key information automatically', color: 'purple' },
+                                            { icon: BarChart3, title: 'Score & Analyze', desc: 'Get detailed scoring and feedback', color: 'pink' },
+                                            { icon: Lightbulb, title: 'AI Suggestions', desc: 'Receive personalized improvements', color: 'indigo' }
+                                        ].map((feature, idx) => (
+                                            <div key={idx} className={`p-8 bg-gradient-to-br from-${feature.color}-50 to-${feature.color}-100 rounded-2xl shadow-lg hover:shadow-xl transition transform hover:-translate-y-1`}>
+                                                <feature.icon className={`mx-auto text-${feature.color}-600 mb-4`} size={40} />
+                                                <h3 className="font-bold text-gray-800 mb-3 text-lg">{feature.title}</h3>
+                                                <p className="text-sm text-gray-600">{feature.desc}</p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Resumes List Tab */}
+                        {activeTab === 'resumes' && (
+                            <div className="space-y-6">
+                                <div className="flex justify-between items-center mb-6">
+                                    <h2 className="text-3xl font-bold text-gray-800">My Resumes</h2>
+                                    <button
+                                        onClick={() => setActiveTab('upload')}
+                                        className="px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl hover:shadow-lg transition transform hover:scale-105 font-semibold"
+                                    >
+                                        + Upload New
+                                    </button>
+                                </div>
+
+                                {resumes.length === 0 ? (
+                                    <div className="bg-white rounded-2xl p-16 text-center shadow-lg">
+                                        <FileText className="mx-auto text-gray-400 mb-4" size={80} />
+                                        <p className="text-gray-600 text-lg">No resumes uploaded yet. Upload your first resume to get started!</p>
+                                    </div>
+                                ) : (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                        {resumes.map((resume) => (
+                                            <div key={resume.id} className="bg-white rounded-2xl shadow-lg p-6 hover:shadow-2xl transition-all transform hover:-translate-y-1 border border-purple-100">
+                                                <div className="flex items-start justify-between mb-4">
+                                                    <div className="flex-1">
+                                                        <h3 className="font-bold text-xl text-gray-800">{resume.personal_info?.name || 'Unknown'}</h3>
+                                                        <p className="text-sm text-gray-500">{resume.personal_info?.email}</p>
+                                                    </div>
+                                                    <div className="w-14 h-14 bg-gradient-to-br from-purple-100 to-pink-100 rounded-full flex items-center justify-center">
+                                                        <FileText className="text-purple-600" size={28} />
+                                                    </div>
+                                                </div>
+
+                                                <div className="space-y-2 mb-4">
+                                                    <div className="flex items-center text-sm text-gray-600">
+                                                        <Briefcase size={16} className="mr-2 text-purple-600" />
+                                                        <span>{resume.work_experience?.length || 0} Experiences</span>
+                                                    </div>
+                                                    <div className="flex items-center text-sm text-gray-600">
+                                                        <Star size={16} className="mr-2 text-pink-600" />
+                                                        <span>{resume.skills?.length || 0} Skills</span>
+                                                    </div>
+                                                </div>
+
+                                                <div className="flex flex-col space-y-2">
+                                                    <button
+                                                        onClick={() => {
+                                                            setSelectedResume(resume);
+                                                            setActiveTab('view');
+                                                        }}
+                                                        className="w-full px-4 py-2 bg-purple-50 text-purple-600 rounded-lg hover:bg-purple-100 transition text-sm font-semibold"
+                                                    >
+                                                        <Eye size={16} className="inline mr-1" />
+                                                        View Details
+                                                    </button>
+                                                    <div className="flex space-x-2">
+                                                        <button
+                                                            onClick={() => analyzeResume(resume.id)}
+                                                            className="flex-1 px-3 py-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition text-sm font-semibold"
+                                                        >
+                                                            <BarChart3 size={16} className="inline mr-1" />
+                                                            Analyze
+                                                        </button>
+                                                        <button
+                                                            onClick={() => {
+                                                                setSelectedResume(resume);
+                                                                getSuggestions(resume.id);
+                                                            }}
+                                                            className="flex-1 px-3 py-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition text-sm font-semibold"
+                                                        >
+                                                            <Lightbulb size={16} className="inline mr-1" />
+                                                            Tips
+                                                        </button>
+                                                        <button
+                                                            onClick={() => deleteResume(resume.id)}
+                                                            className="px-3 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition"
+                                                        >
+                                                            <Trash2 size={16} />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* View Resume Tab */}
+                        {activeTab === 'view' && selectedResume && (
+                            <div className="bg-white rounded-3xl shadow-2xl p-10 border border-purple-100">
+                                <div className="flex justify-between items-start mb-8">
+                                    <div>
+                                        <h2 className="text-4xl font-bold text-gray-800 mb-2">{selectedResume.personal_info?.name}</h2>
+                                        <p className="text-gray-600 text-lg">{selectedResume.personal_info?.email}</p>
+                                        <p className="text-gray-600">{selectedResume.personal_info?.phone}</p>
+                                        {selectedResume.personal_info?.location && (
+                                            <p className="text-gray-600">{selectedResume.personal_info.location}</p>
+                                        )}
+                                    </div>
+                                    <div className="flex space-x-3">
+                                        <button
+                                            onClick={() => analyzeResume(selectedResume.id)}
+                                            className="px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl hover:shadow-lg transition font-semibold"
+                                        >
+                                            Analyze Resume
+                                        </button>
+                                        <button
+                                            onClick={() => getSuggestions(selectedResume.id)}
+                                            className="px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl hover:shadow-lg transition font-semibold"
+                                        >
+                                            Get Suggestions
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {selectedResume.summary && (
+                                    <div className="mb-8">
+                                        <h3 className="text-2xl font-bold text-gray-800 mb-4 flex items-center">
+                                            <FileText className="mr-3 text-purple-600" size={28} />
+                                            Professional Summary
+                                        </h3>
+                                        <p className="text-gray-700 leading-relaxed bg-gradient-to-r from-purple-50 to-pink-50 p-6 rounded-xl border border-purple-100">{selectedResume.summary}</p>
+                                    </div>
+                                )}
+
+                                {selectedResume.skills && selectedResume.skills.length > 0 && (
+                                    <div className="mb-8">
+                                        <h3 className="text-2xl font-bold text-gray-800 mb-4 flex items-center">
+                                            <Star className="mr-3 text-pink-600" size={28} />
+                                            Skills
+                                        </h3>
+                                        <div className="flex flex-wrap gap-3">
+                                            {selectedResume.skills.map((skill, idx) => (
+                                                <span key={idx} className="px-5 py-2 bg-gradient-to-r from-purple-100 to-pink-100 text-purple-700 rounded-full text-sm font-semibold shadow-md">
+                                                    {skill}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {selectedResume.work_experience && selectedResume.work_experience.length > 0 && (
+                                    <div className="mb-8">
+                                        <h3 className="text-2xl font-bold text-gray-800 mb-6 flex items-center">
+                                            <Briefcase className="mr-3 text-indigo-600" size={28} />
+                                            Work Experience
+                                        </h3>
+                                        <div className="space-y-6">
+                                            {selectedResume.work_experience.map((exp, idx) => (
+                                                <div key={idx} className="border-l-4 border-purple-600 pl-8 py-3 bg-gradient-to-r from-purple-50 to-transparent rounded-r-xl">
+                                                    <h4 className="font-bold text-xl text-gray-800">{exp.job_title}</h4>
+                                                    <p className="text-purple-600 font-semibold text-lg">{exp.company}</p>
+                                                    <p className="text-sm text-gray-500 mb-3">{exp.start_date} - {exp.end_date || 'Present'}</p>
+                                                    {exp.description && <p className="text-gray-700 leading-relaxed">{exp.description}</p>}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {selectedResume.education && selectedResume.education.length > 0 && (
+                                    <div className="mb-8">
+                                        <h3 className="text-2xl font-bold text-gray-800 mb-6 flex items-center">
+                                            <Database className="mr-3 text-blue-600" size={28} />
+                                            Education
+                                        </h3>
+                                        <div className="space-y-4">
+                                            {selectedResume.education.map((edu, idx) => (
+                                                <div key={idx} className="bg-gradient-to-r from-blue-50 to-indigo-50 p-6 rounded-xl border border-blue-100">
+                                                    <h4 className="font-bold text-lg text-gray-800">{edu.degree}</h4>
+                                                    <p className="text-blue-600 font-semibold">{edu.institution}</p>
+                                                    <p className="text-sm text-gray-500">{edu.end_date}</p>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {selectedResume.projects && selectedResume.projects.length > 0 && (
+                                    <div>
+                                        <h3 className="text-2xl font-bold text-gray-800 mb-6 flex items-center">
+                                            <Target className="mr-3 text-green-600" size={28} />
+                                            Projects
+                                        </h3>
+                                        <div className="space-y-4">
+                                            {selectedResume.projects.map((project, idx) => (
+                                                <div key={idx} className="bg-gradient-to-r from-green-50 to-emerald-50 p-6 rounded-xl border border-green-100">
+                                                    <h4 className="font-bold text-lg text-gray-800">{project.name}</h4>
+                                                    <p className="text-gray-700 mb-3">{project.description}</p>
+                                                    {project.technologies && project.technologies.length > 0 && (
+                                                        <div className="flex flex-wrap gap-2">
+                                                            {project.technologies.map((tech, techIdx) => (
+                                                                <span key={techIdx} className="px-3 py-1 bg-green-200 text-green-800 rounded-full text-xs font-semibold">
+                                                                    {tech}
+                                                                </span>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Analysis Tab */}
+                        {activeTab === 'analysis' && (
+                            <div className="space-y-6">
+                                {!analysis ? (
+                                    <div className="bg-white rounded-3xl shadow-2xl p-16 border border-purple-100 text-center">
+                                        <div className="w-28 h-28 bg-gradient-to-br from-purple-100 to-pink-100 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg">
+                                            <BarChart3 className="text-purple-600" size={56} />
+                                        </div>
+                                        <h2 className="text-3xl font-bold text-gray-800 mb-4">No Analysis Available</h2>
+                                        <p className="text-gray-600 mb-8 max-w-2xl mx-auto text-lg">
+                                            To analyze a resume, please go to "My Resumes" and click the "Analyze" button on any resume.
+                                        </p>
+                                        <button
+                                            onClick={() => setActiveTab('resumes')}
+                                            className="px-10 py-5 bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-600 text-white rounded-2xl hover:shadow-2xl transition-all transform hover:scale-105 font-bold text-lg"
+                                        >
+                                            Go to My Resumes
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <div className="bg-white rounded-3xl shadow-2xl p-10 border border-purple-100">
+                                        <h2 className="text-4xl font-bold text-gray-800 mb-8">Resume Analysis</h2>
+
+                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
+                                            {[
+                                                { label: 'Overall Score', value: analysis.overall_score, color: 'purple', icon: Target },
+                                                { label: 'Skills Score', value: analysis.skills_score, color: 'green', icon: Star },
+                                                { label: 'Readability', value: analysis.readability_score, color: 'blue', icon: FileText },
+                                                { label: 'Grammar', value: analysis.grammar_score, color: 'pink', icon: CheckCircle }
+                                            ].map((metric, idx) => (
+                                                <div key={idx} className={`bg-gradient-to-br from-${metric.color}-50 to-${metric.color}-100 rounded-2xl p-6 shadow-lg border border-${metric.color}-200`}>
+                                                    <div className="flex items-center justify-between mb-3">
+                                                        <metric.icon className={`text-${metric.color}-600`} size={32} />
+                                                        <span className={`text-4xl font-bold text-${metric.color}-600`}>{metric.value}</span>
+                                                    </div>
+                                                    <p className="text-sm text-gray-700 font-semibold">{metric.label}</p>
+                                                </div>
+                                            ))}
+                                        </div>
+
+                                        {analysis.feedback && (
+                                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
+                                                {Object.entries(analysis.feedback).map(([key, value]) => (
+                                                    <div key={key} className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl p-6 shadow-md border border-gray-200">
+                                                        <h4 className="font-bold text-gray-800 capitalize mb-3 text-lg">{key}</h4>
+                                                        <p className="text-sm text-gray-600">{value}</p>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+
+                                        {analysis.matched_skills && analysis.matched_skills.length > 0 && (
+                                            <div className="mb-8">
+                                                <h3 className="font-bold text-gray-800 mb-4 flex items-center text-xl">
+                                                    <CheckCircle className="text-green-600 mr-3" size={24} />
+                                                    Matched Skills ({analysis.matched_skills.length})
+                                                </h3>
+                                                <div className="flex flex-wrap gap-3">
+                                                    {analysis.matched_skills.map((skill, idx) => (
+                                                        <span key={idx} className="px-4 py-2 bg-green-100 text-green-700 rounded-full text-sm font-semibold shadow-md">
+                                                            ✓ {skill}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {analysis.missing_skills && analysis.missing_skills.length > 0 && (
+                                            <div>
+                                                <h3 className="font-bold text-gray-800 mb-4 flex items-center text-xl">
+                                                    <AlertCircle className="text-orange-600 mr-3" size={24} />
+                                                    Suggested Skills to Add
+                                                </h3>
+                                                <div className="flex flex-wrap gap-3">
+                                                    {analysis.missing_skills.slice(0, 15).map((skill, idx) => (
+                                                        <span key={idx} className="px-4 py-2 bg-orange-100 text-orange-700 rounded-full text-sm font-semibold shadow-md">
+                                                            + {skill}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Suggestions Tab */}
+                        {activeTab === 'suggestions' && (
+                            <div className="bg-white rounded-3xl shadow-2xl p-10 border border-purple-100">
+                                {suggestions.length === 0 ? (
+                                    <div className="text-center py-12">
+                                        <div className="w-28 h-28 bg-gradient-to-br from-blue-100 to-indigo-100 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg">
+                                            <Lightbulb className="text-blue-600" size={56} />
+                                        </div>
+                                        <h2 className="text-3xl font-bold text-gray-800 mb-4">No Suggestions Available</h2>
+                                        <p className="text-gray-600 mb-8 max-w-2xl mx-auto text-lg">
+                                            To get AI-powered suggestions, please go to "My Resumes" and click the "Tips" button on any resume.
+                                        </p>
+                                        <button
+                                            onClick={() => setActiveTab('resumes')}
+                                            className="px-10 py-5 bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-600 text-white rounded-2xl hover:shadow-2xl transition-all transform hover:scale-105 font-bold text-lg"
+                                        >
+                                            Go to My Resumes
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <>
+                                        <div className="text-center mb-10">
+                                            <div className="w-20 h-20 bg-gradient-to-br from-blue-100 to-indigo-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                                <Lightbulb className="text-blue-600" size={48} />
+                                            </div>
+                                            <h2 className="text-4xl font-bold text-gray-800 mb-3">AI-Powered Suggestions</h2>
+                                            <p className="text-gray-600 text-lg">Personalized recommendations to improve your resume</p>
+                                        </div>
+
+                                        {loading ? (
+                                            <div className="text-center py-12">
+                                                <p className="text-gray-600 text-lg">Generating suggestions...</p>
+                                            </div>
+                                        ) : (
+                                            <div className="space-y-4">
+                                                {suggestions.map((suggestion, idx) => (
+                                                    <div key={idx} className="bg-gradient-to-r from-blue-50 to-indigo-50 p-6 rounded-2xl border border-blue-200 shadow-md hover:shadow-lg transition">
+                                                        <div className="flex items-start">
+                                                            <div className="w-10 h-10 bg-blue-600 text-white rounded-full flex items-center justify-center font-bold mr-4 flex-shrink-0">
+                                                                {idx + 1}
+                                                            </div>
+                                                            <div className="flex-1">
+                                                                <h4 className="font-bold text-gray-800 mb-2 text-lg capitalize">{suggestion.category}</h4>
+                                                                <p className="text-gray-700">{suggestion.suggestion}</p>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Analytics Tab */}
+                        {activeTab === 'analytics' && analytics && (
+                            <div className="space-y-6">
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                    {[
+                                        { label: 'Total Resumes', value: analytics.total_resumes, icon: FileText, color: 'purple' },
+                                        { label: 'Total Jobs', value: analytics.total_jobs, icon: Briefcase, color: 'pink' },
+                                        { label: 'Avg Score', value: analytics.average_resume_score.toFixed(1), icon: TrendingUp, color: 'indigo' }
+                                    ].map((stat, idx) => (
+                                        <div key={idx} className="bg-white rounded-2xl shadow-xl p-8 border border-purple-100">
+                                            <div className="flex items-center justify-between">
+                                                <div>
+                                                    <p className="text-gray-600 text-sm mb-2 font-semibold">{stat.label}</p>
+                                                    <p className={`text-5xl font-bold bg-gradient-to-r from-${stat.color}-600 to-${stat.color}-400 bg-clip-text text-transparent`}>{stat.value}</p>
+                                                </div>
+                                                <div className={`w-20 h-20 bg-gradient-to-br from-${stat.color}-100 to-${stat.color}-200 rounded-full flex items-center justify-center shadow-lg`}>
+                                                    <stat.icon className={`text-${stat.color}-600`} size={40} />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                {analytics.top_skills && analytics.top_skills.length > 0 && (
+                                    <div className="bg-white rounded-2xl shadow-xl p-10 border border-purple-100">
+                                        <h3 className="text-3xl font-bold text-gray-800 mb-8">Top Skills Across Platform</h3>
+                                        <div className="space-y-5">
+                                            {analytics.top_skills.map((skill, idx) => (
+                                                <div key={idx} className="flex items-center">
+                                                    <div className="w-8 h-8 bg-purple-600 text-white rounded-full flex items-center justify-center font-bold mr-4 text-sm">
+                                                        {idx + 1}
+                                                    </div>
+                                                    <div className="w-40 text-sm font-semibold text-gray-700">{skill.skill}</div>
+                                                    <div className="flex-1 bg-gray-200 rounded-full h-5 overflow-hidden shadow-inner">
+                                                        <div
+                                                            className="bg-gradient-to-r from-purple-600 to-pink-600 h-full rounded-full transition-all shadow-lg"
+                                                            style={{ width: `${(skill.count / analytics.total_resumes) * 100}%` }}
+                                                        />
+                                                    </div>
+                                                    <div className="w-20 text-right text-sm font-bold text-purple-600 ml-4">{skill.count} users</div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </main>
+
+                    {/* Footer */}
+                    <footer className="bg-white/80 backdrop-blur-lg border-t border-purple-100 mt-20">
+                        <div className="max-w-7xl mx-auto px-4 py-8">
+                            <div className="text-center text-gray-600">
+                                <p className="font-semibold">© 2025 ResumeHub. AI-Powered Resume Intelligence Platform.</p>
+                                <p className="text-sm mt-2">Built with FastAPI, Gemini AI, React & Tailwind CSS</p>
+                            </div>
+                        </div>
+                    </footer>
+                </div>
+            );
+        };
+
+        // Render the app
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<ResumeHub />);
+    </script>
+</body>
+
+</html>

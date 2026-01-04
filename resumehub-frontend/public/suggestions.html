@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Suggestions - AI Resume Parser</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(to br, rgb(238, 242, 255), rgb(250, 245, 255), rgb(252, 231, 243));
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+
+        .header {
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(16px);
+            color: #1f2937;
+            padding: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+            border-bottom: 1px solid rgb(216, 180, 254);
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .logo {
+            width: 50px;
+            height: 50px;
+            background: linear-gradient(to br, rgb(147, 51, 234), rgb(219, 39, 119), rgb(79, 70, 229));
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            box-shadow: 0 8px 16px rgba(147, 51, 234, 0.3);
+        }
+
+        .back-btn {
+            background: linear-gradient(to r, rgb(147, 51, 234), rgb(219, 39, 119));
+            border: none;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 12px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s;
+            box-shadow: 0 4px 6px rgba(147, 51, 234, 0.2);
+        }
+
+        .back-btn:hover {
+            box-shadow: 0 6px 12px rgba(147, 51, 234, 0.3);
+            transform: translateY(-2px);
+        }
+
+        .content {
+            padding: 40px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 60px;
+        }
+
+        .spinner {
+            border: 4px solid #f3f4f6;
+            border-top: 4px solid rgb(147, 51, 234);
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        .suggestion-category {
+            background: #f8f9ff;
+            padding: 30px;
+            border-radius: 15px;
+            margin-bottom: 25px;
+        }
+
+        .category-header {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .category-icon {
+            width: 50px;
+            height: 50px;
+            background: linear-gradient(to br, rgb(147, 51, 234), rgb(219, 39, 119), rgb(79, 70, 229));
+            color: white;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            box-shadow: 0 4px 8px rgba(147, 51, 234, 0.2);
+        }
+
+        .category-title {
+            font-size: 22px;
+            font-weight: 700;
+            color: #1f2937;
+        }
+
+        .suggestion-list {
+            list-style: none;
+        }
+
+        .suggestion-item {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 15px;
+            border-left: 4px solid rgb(147, 51, 234);
+            position: relative;
+            transition: all 0.3s;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+
+        .suggestion-item:hover {
+            transform: translateX(5px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .suggestion-priority {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .priority-high {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .priority-medium {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .priority-low {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .suggestion-text {
+            color: #4b5563;
+            line-height: 1.7;
+            padding-right: 100px;
+        }
+
+        .suggestion-action {
+            margin-top: 15px;
+            padding: 10px 20px;
+            background: linear-gradient(to r, rgb(147, 51, 234), rgb(219, 39, 119));
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s;
+            box-shadow: 0 2px 4px rgba(147, 51, 234, 0.2);
+        }
+
+        .suggestion-action:hover {
+            box-shadow: 0 4px 8px rgba(147, 51, 234, 0.3);
+            transform: translateY(-2px);
+        }
+
+        .ai-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            background: linear-gradient(to r, rgb(147, 51, 234), rgb(219, 39, 119));
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 30px;
+            box-shadow: 0 2px 4px rgba(147, 51, 234, 0.2);
+        }
+
+        .example-box {
+            background: #f3f4f6;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 10px;
+            border-left: 3px solid #10b981;
+        }
+
+        .example-label {
+            font-weight: 600;
+            color: #059669;
+            margin-bottom: 5px;
+            font-size: 13px;
+        }
+
+        .example-text {
+            color: #4b5563;
+            font-size: 14px;
+            font-style: italic;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="header-left">
+                <div class="logo">💡</div>
+                <h1>AI-Powered Suggestions</h1>
+            </div>
+            <button class="back-btn" onclick="window.location.href='index.html'">← Back to Dashboard</button>
+        </div>
+
+        <div class="content">
+            <div id="loading" class="loading">
+                <div class="spinner"></div>
+                <p>Generating personalized suggestions...</p>
+            </div>
+
+            <div id="suggestions" style="display: none;">
+                <div class="ai-badge">
+                    <span>🤖</span>
+                    <span>Powered by Gemini AI</span>
+                </div>
+
+                <div id="suggestionsContainer"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        const email = urlParams.get('email');
+
+        if (!email) {
+            alert('No resume selected. Redirecting to dashboard...');
+            window.location.href = 'index.html';
+        }
+
+        async function loadSuggestions() {
+            try {
+                const response = await fetch(`http://127.0.0.1:8000/get-suggestions/${email}`);
+
+                if (!response.ok) {
+                    throw new Error('Failed to get suggestions');
+                }
+
+                const data = await response.json();
+                displaySuggestions(data);
+            } catch (error) {
+                document.getElementById('loading').innerHTML = `
+                    <p style="color: #ef4444;">Error: ${error.message}</p>
+                    <button class="back-btn" onclick="window.location.href='index.html'" 
+                            style="background: #667eea; margin-top: 20px;">Go Back</button>
+                `;
+            }
+        }
+
+        function displaySuggestions(data) {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('suggestions').style.display = 'block';
+
+            const container = document.getElementById('suggestionsContainer');
+
+            // Structure suggestions
+            const suggestions = data.suggestions || data;
+
+            displayCategory(container, '📝 Content Improvements', suggestions.content || []);
+            displayCategory(container, '🎯 Skills Enhancement', suggestions.skills || []);
+            displayCategory(container, '📊 Formatting & Structure', suggestions.formatting || []);
+            displayCategory(container, '🌟 Professional Impact', suggestions.impact || []);
+        }
+
+        function displayCategory(container, title, items) {
+            if (!items || items.length === 0) return;
+
+            const categoryDiv = document.createElement('div');
+            categoryDiv.className = 'suggestion-category';
+
+            const icon = title.match(/[📝🎯📊🌟]/)[0];
+
+            categoryDiv.innerHTML = `
+                <div class="category-header">
+                    <div class="category-icon">${icon}</div>
+                    <div class="category-title">${title.replace(icon, '').trim()}</div>
+                </div>
+                <ul class="suggestion-list" id="${title.replace(/\s+/g, '-')}"></ul>
+            `;
+
+            container.appendChild(categoryDiv);
+
+            const listElement = categoryDiv.querySelector('.suggestion-list');
+            items.forEach((item, index) => {
+                const li = document.createElement('li');
+                li.className = 'suggestion-item';
+
+                const priority = index < 2 ? 'high' : index < 4 ? 'medium' : 'low';
+                const priorityText = priority.charAt(0).toUpperCase() + priority.slice(1);
+
+                li.innerHTML = `
+                    <span class="suggestion-priority priority-${priority}">${priorityText} Priority</span>
+                    <div class="suggestion-text">${item.text || item}</div>
+                    ${item.example ? `
+                        <div class="example-box">
+                            <div class="example-label">💡 Example:</div>
+                            <div class="example-text">${item.example}</div>
+                        </div>
+                    ` : ''}
+                `;
+
+                listElement.appendChild(li);
+            });
+        }
+
+        loadSuggestions();
+    </script>
+</body>
+
+</html>

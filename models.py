@@ -18,18 +18,15 @@ class Resume(Base):
     work_experiences = relationship("WorkExperience", back_populates="resume", cascade="all, delete-orphan")
     projects = relationship("Project", back_populates="resume", cascade="all, delete-orphan")
     educations = relationship("Education", back_populates="resume", cascade="all, delete-orphan")
+    score = relationship("ResumeScore", back_populates="resume", uselist=False, cascade="all, delete-orphan")
 
 class PersonalInfo(Base):
     __tablename__ = "personal_info"
     id = Column(Integer, primary_key=True, index=True)
     resume_id = Column(Integer, ForeignKey("resumes.id"))
     name = Column(String, index=True)
-    
-    # --- MODIFIED LINES ---
     email = Column(String, unique=True, index=True, nullable=True)
     phone = Column(String, unique=True, index=True, nullable=True)
-    # --- END MODIFIED LINES ---
-    
     location = Column(String, nullable=True)
     linkedin_url = Column(String, nullable=True)
     resume = relationship("Resume", back_populates="personal_info")
@@ -57,7 +54,6 @@ class Project(Base):
     resume_id = Column(Integer, ForeignKey("resumes.id"))
     name = Column(String)
     description = Column(Text, nullable=True)
-    # Technologies are stored as a comma-separated string for simplicity
     technologies = Column(String, nullable=True)
     resume = relationship("Resume", back_populates="projects")
 
@@ -69,3 +65,35 @@ class Education(Base):
     degree = Column(String, nullable=True)
     end_date = Column(String, nullable=True)
     resume = relationship("Resume", back_populates="educations")
+
+class ResumeScore(Base):
+    __tablename__ = "resume_scores"
+    id = Column(Integer, primary_key=True, index=True)
+    resume_id = Column(Integer, ForeignKey("resumes.id"), unique=True)
+    overall_score = Column(Integer)
+    skills_score = Column(Integer)
+    readability_score = Column(Integer)
+    grammar_score = Column(Integer)
+    analysis_date = Column(String)
+    resume = relationship("Resume", back_populates="score")
+
+class JobPosting(Base):
+    __tablename__ = "job_postings"
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String)
+    company = Column(String)
+    description = Column(Text)
+    required_skills = Column(Text)
+    created_at = Column(String)
+    matches = relationship("ResumeJobMatch", back_populates="job")
+
+class ResumeJobMatch(Base):
+    __tablename__ = "resume_job_matches"
+    id = Column(Integer, primary_key=True, index=True)
+    resume_id = Column(Integer, ForeignKey("resumes.id"))
+    job_id = Column(Integer, ForeignKey("job_postings.id"))
+    match_score = Column(Integer)
+    matched_skills = Column(Text)
+    created_at = Column(String)
+    resume = relationship("Resume")
+    job = relationship("JobPosting", back_populates="matches")
