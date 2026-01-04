@@ -7,7 +7,7 @@ google-generativeai
 sqlalchemy
 python-dotenv
 spacy
-language-tool-python
 textstat
 pydantic
+psycopg2-binary
 https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1-py3-none-any.whl
