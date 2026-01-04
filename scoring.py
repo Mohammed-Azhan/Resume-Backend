@@ -8,7 +8,7 @@ import re
 class ResumeScorer:
     def __init__(self):
         self.nlp = spacy.load("en_core_web_sm")
-        self.tool = language_tool_python.LanguageTool('en-US')
+        # self.tool = language_tool_python.LanguageTool('en-US')
         self.TARGET_SKILLS = [
             'python', 'java', 'c++', 'javascript', 'sql', 'html', 'css', 
             'react', 'angular', 'vue', 'nodejs', 'django', 'flask', 'git', 
