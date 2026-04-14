@@ -11,11 +11,22 @@ from typing import Dict, List
 
 
 load_dotenv()
-API_KEY = os.environ["GEMINI_API_KEY"]
+API_KEY = os.getenv("GEMINI_API_KEY")
 client = genai.Client(api_key=API_KEY) 
 
 # ─── Singleton: load SpaCy once at import time, not per request ───────────────
-_nlp = spacy.load("en_core_web_sm")
+_nlp = None
+
+def get_nlp():
+    global _nlp
+    if _nlp is None:
+        try:
+            _nlp = spacy.load("en_core_web_sm")
+        except:
+            from spacy.cli import download
+            download("en_core_web_sm")
+            _nlp = spacy.load("en_core_web_sm")
+    return _nlp
 
 # ─── Simple in-process result cache  {text_hash -> analysis_dict} ─────────────
 _analysis_cache: dict = {}
@@ -25,7 +36,7 @@ class ResumeScorer:
 
     def __init__(self):
         # Reuse the module-level SpaCy model — no re-loading cost per request
-        self.nlp = _nlp
+        self.nlp = get_nlp()
 
     # ──────────────────────────────────────────────────────────────────────────
     # Helpers
