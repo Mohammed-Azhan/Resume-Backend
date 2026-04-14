@@ -12,6 +12,7 @@ class Resume(Base):
     __tablename__ = "resumes"
     id = Column(Integer, primary_key=True, index=True)
     summary = Column(Text, nullable=True)
+    file_hash = Column(String, nullable=True, unique=True, index=True)  # SHA-256 of raw file bytes for dedup caching
     
     personal_info = relationship("PersonalInfo", back_populates="resume", uselist=False, cascade="all, delete-orphan")
     skills = relationship("Skill", secondary=resume_skill_association, back_populates="resumes")
@@ -74,6 +75,8 @@ class ResumeScore(Base):
     skills_score = Column(Integer)
     readability_score = Column(Integer)
     grammar_score = Column(Integer)
+    matched_skills = Column(Text, nullable=True) # JSON string
+    missing_skills = Column(Text, nullable=True) # JSON string
     analysis_date = Column(String)
     resume = relationship("Resume", back_populates="score")
 
@@ -97,3 +100,26 @@ class ResumeJobMatch(Base):
     created_at = Column(String)
     resume = relationship("Resume")
     job = relationship("JobPosting", back_populates="matches")
+
+
+# ── NEW: Resume Versioning ─────────────────────────────────────────────────────
+class ResumeVersion(Base):
+    """
+    Stores editable snapshots of a resume, each with a unique shareable URL.
+    Does NOT touch or modify any column of the existing Resume model.
+    """
+    __tablename__ = "resume_versions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    resume_id = Column(Integer, ForeignKey("resumes.id"))
+
+    version_name = Column(String)
+    unique_url = Column(String, unique=True, index=True)
+
+    summary = Column(Text)
+    skills = Column(Text)        # JSON string: ["Python", "React", ...]
+    experience = Column(Text)    # JSON string: [{company, job_title, ...}, ...]
+    projects = Column(Text)      # JSON string: [{name, description, ...}, ...]
+    education = Column(Text)     # JSON string: [{institution, degree, ...}, ...]
+
+    created_at = Column(String)
