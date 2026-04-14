@@ -528,4 +528,5 @@ Built with FastAPI, Google Gemini AI, React, and Tailwind CSS
 #   r e s u m e - a n a l y z e r - p r o j e c t  
  #   R e s u m e I Q _ B a c k e n d  
  #   R e s u m e I Q _ B a c k e n d  
+ #   R e s u m e - B a c k e n d  
  
