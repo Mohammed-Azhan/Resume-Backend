@@ -4,20 +4,24 @@ import hashlib
 import fitz  
 import docx
 from google import genai
-from fastapi import FastAPI, UploadFile, File, HTTPException, Depends
+from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, Security
 from fastapi.staticfiles import StaticFiles
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import RedirectResponse
 import io
-from sqlalchemy import func
+from sqlalchemy import func, text, inspect as sa_inspect
 from dotenv import load_dotenv
 import hashlib
-from typing import List
+from typing import List, Optional
 from sqlalchemy.orm import Session
 from database import SessionLocal, engine
 import crud, models, schemas
 from fastapi.middleware.cors import CORSMiddleware
 from scoring import ResumeScorer
-from datetime import datetime
+from datetime import datetime, timedelta
+from passlib.context import CryptContext
+from jose import JWTError, jwt
+from pydantic import BaseModel as PydanticBaseModel
 
 
 # Initialize scorer (add after app initialization)
@@ -25,6 +29,17 @@ scorer = ResumeScorer()
 
 
 models.Base.metadata.create_all(bind=engine)
+
+# ── SQLite migration: ensure user_id column exists on resumes table ───────────────
+try:
+    with engine.connect() as _conn:
+        _existing_cols = [col["name"] for col in sa_inspect(engine).get_columns("resumes")]
+        if "user_id" not in _existing_cols:
+            _conn.execute(text("ALTER TABLE resumes ADD COLUMN user_id INTEGER REFERENCES users(id)"))
+            _conn.commit()
+            print("Migration: added user_id column to resumes table")
+except Exception as _migration_err:
+    print(f"Migration note: {_migration_err}")
 
 load_dotenv()
 try:
@@ -37,6 +52,24 @@ if API_KEY == "YOUR_GEMINI_API_KEY":
 
 # Initialize the new SDK client
 gemini_client = genai.Client(api_key=API_KEY) if API_KEY != "YOUR_GEMINI_API_KEY" else None
+
+# ── Auth configuration ─────────────────────────────────────────────────────────────────────────────────
+SECRET_KEY = os.environ.get("SECRET_KEY", "resumeiq-super-secret-key-change-in-production-2024")
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_DAYS = 30
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+security_scheme = HTTPBearer(auto_error=False)
+
+
+# ── Auth Pydantic schemas ─────────────────────────────────────────────────────────
+class SignupRequest(PydanticBaseModel):
+    email: str
+    password: str
+    username: str = ""
+
+class LoginRequest(PydanticBaseModel):
+    email: str
+    password: str
 
 app = FastAPI(
     title="Resume Parser API",
@@ -58,6 +91,55 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+# ── Auth helper functions ─────────────────────────────────────────────────────────────────
+def verify_password(plain: str, hashed: str) -> bool:
+    return pwd_context.verify(plain, hashed)
+
+def get_password_hash(password: str) -> str:
+    return pwd_context.hash(password)
+
+def create_access_token(data: dict) -> str:
+    to_encode = data.copy()
+    expire = datetime.utcnow() + timedelta(days=ACCESS_TOKEN_EXPIRE_DAYS)
+    to_encode["exp"] = expire
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+def _decode_token(token: str) -> Optional[int]:
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        uid = payload.get("sub")
+        return int(uid) if uid is not None else None
+    except (JWTError, ValueError):
+        return None
+
+def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Security(security_scheme),
+    db: Session = Depends(get_db)
+) -> models.User:
+    """Required auth dependency — raises HTTP 401 if missing or invalid token."""
+    if not credentials:
+        raise HTTPException(status_code=401, detail="Not authenticated. Please login.")
+    uid = _decode_token(credentials.credentials)
+    if uid is None:
+        raise HTTPException(status_code=401, detail="Invalid or expired token.")
+    user = db.query(models.User).filter(models.User.id == uid).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found.")
+    return user
+
+def get_optional_current_user(
+    credentials: HTTPAuthorizationCredentials = Security(security_scheme),
+    db: Session = Depends(get_db)
+) -> Optional[models.User]:
+    """Optional auth dependency — returns None if not logged in."""
+    if not credentials:
+        return None
+    uid = _decode_token(credentials.credentials)
+    if uid is None:
+        return None
+    return db.query(models.User).filter(models.User.id == uid).first()
 
 def extract_text_from_pdf(file_bytes: bytes) -> str:
     try:
@@ -124,7 +206,11 @@ STRICT JSON ONLY. NO TEXT.
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/parse-resume/", response_model=schemas.ResumeData)
-async def parse_and_save_resume(file: UploadFile = File(...), db: Session = Depends(get_db)):
+async def parse_and_save_resume(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: Optional[models.User] = Depends(get_optional_current_user)
+):
 
     if not file.content_type in [
         "application/pdf",
@@ -164,6 +250,12 @@ async def parse_and_save_resume(file: UploadFile = File(...), db: Session = Depe
     
     # Ensure ID is included in the response
     structured_data.id = db_resume.id
+
+    # Link resume to the authenticated user if logged in and not already linked
+    if current_user is not None and db_resume.user_id is None:
+        db_resume.user_id = current_user.id
+        db.commit()
+
     return structured_data
 
 @app.get("/resumes/{resume_id}", response_model=schemas.ResumeData, tags=["Database"])
@@ -204,8 +296,14 @@ def search_resume_by_email(email: str, db: Session = Depends(get_db)):
     )
 
 @app.get("/resumes/", response_model=List[schemas.ResumeData], tags=["Database"])
-def list_all_resumes(db: Session = Depends(get_db)):
-    resumes = db.query(models.Resume).all()
+def list_all_resumes(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """Returns ONLY the resumes owned by the currently authenticated user."""
+    resumes = db.query(models.Resume).filter(
+        models.Resume.user_id == current_user.id
+    ).all()
     result = []
     for db_resume in resumes:
         resume_data = schemas.ResumeData(
@@ -236,7 +334,7 @@ def delete_resume_by_id_legacy(resume_id: int, db: Session = Depends(get_db)):
 
 @app.get("/", tags=["Root"])
 async def read_root():
-    return {"message": "Welcome to the Resume Parser API. Go to /docs for the API documentation."}
+    return RedirectResponse(url="/app/landing.html")
 
 
 @app.post("/resumes/{resume_id}/analyze", tags=["Analysis"])
@@ -874,9 +972,56 @@ def shortlink_redirect(unique_url: str, db: Session = Depends(get_db)):
     return RedirectResponse(url=f"/app/resume_view.html?url={unique_url}")
 
 
+
+# ── Auth Endpoints ────────────────────────────────────────────────────────────────────────────────────────
+
+@app.post("/auth/signup", tags=["Auth"])
+def signup(request: SignupRequest, db: Session = Depends(get_db)):
+    """Create a new user account and return a JWT access token."""
+    existing = db.query(models.User).filter(models.User.email == request.email).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="An account with this email already exists.")
+    user = models.User(
+        email=request.email,
+        username=request.username.strip() or request.email.split("@")[0],
+        hashed_password=get_password_hash(request.password),
+        created_at=datetime.now().isoformat()
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    token = create_access_token({"sub": str(user.id)})
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "user": {"id": user.id, "email": user.email, "username": user.username}
+    }
+
+
+@app.post("/auth/login", tags=["Auth"])
+def login(request: LoginRequest, db: Session = Depends(get_db)):
+    """Authenticate with email + password and return a JWT access token."""
+    user = db.query(models.User).filter(models.User.email == request.email).first()
+    if not user or not verify_password(request.password, user.hashed_password):
+        raise HTTPException(status_code=401, detail="Invalid email or password.")
+    token = create_access_token({"sub": str(user.id)})
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "user": {"id": user.id, "email": user.email, "username": user.username}
+    }
+
+
+@app.get("/auth/me", tags=["Auth"])
+def get_me(current_user: models.User = Depends(get_current_user)):
+    """Return the currently authenticated user's profile."""
+    return {"id": current_user.id, "email": current_user.email, "username": current_user.username}
+
+
 # ── Serve frontend static files ──────────────────────────────────────────────
 # Mount AFTER all API routes so API paths take precedence
 try:
     app.mount("/app", StaticFiles(directory="resumehub-frontend/public", html=True), name="frontend")
 except Exception:
     pass  # Skip if directory not found (e.g., in tests)
+

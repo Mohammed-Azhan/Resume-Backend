@@ -2,6 +2,23 @@ from sqlalchemy import Column, Integer, String, Text, ForeignKey, Table
 from sqlalchemy.orm import relationship
 from database import Base
 
+# ── User model (auth) ─────────────────────────────────────────────────────────
+class User(Base):
+    """
+    Stores authenticated user accounts.
+    Each user owns a set of resumes (via user_id FK on Resume).
+    """
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String, unique=True, index=True, nullable=False)
+    username = Column(String, index=True, nullable=True)
+    hashed_password = Column(String, nullable=False)
+    created_at = Column(String, nullable=True)
+
+    # back-reference to owned resumes
+    resumes = relationship("Resume", back_populates="owner")
+
 # Association table for the many-to-many relationship between Resume and Skill
 resume_skill_association = Table('resume_skill_association', Base.metadata,
     Column('resume_id', Integer, ForeignKey('resumes.id')),
@@ -20,6 +37,10 @@ class Resume(Base):
     projects = relationship("Project", back_populates="resume", cascade="all, delete-orphan")
     educations = relationship("Education", back_populates="resume", cascade="all, delete-orphan")
     score = relationship("ResumeScore", back_populates="resume", uselist=False, cascade="all, delete-orphan")
+
+    # owner (nullable so old/anonymous resumes keep working)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    owner = relationship("User", back_populates="resumes")
 
 class PersonalInfo(Base):
     __tablename__ = "personal_info"

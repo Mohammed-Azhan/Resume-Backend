@@ -12,6 +12,8 @@ from typing import Dict, List
 
 load_dotenv()
 API_KEY = os.getenv("GEMINI_API_KEY")
+if not API_KEY:
+    raise ValueError("GEMINI_API_KEY not found")
 client = genai.Client(api_key=API_KEY) 
 
 # ─── Singleton: load SpaCy once at import time, not per request ───────────────
