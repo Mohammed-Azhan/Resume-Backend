@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 from database import SessionLocal, engine
 import crud, models, schemas
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.orm import joinedload
 from scoring import ResumeScorer
 from datetime import datetime, timedelta
 from passlib.context import CryptContext
@@ -260,17 +261,30 @@ async def parse_and_save_resume(
     file_hash = hashlib.sha256(file_bytes).hexdigest()
 
     # Cache lookup scoped to this user — prevents cross-user cache collisions
-    existing_resume = db.query(models.Resume).filter(
-        models.Resume.file_hash == file_hash,
-        models.Resume.user_id == current_user.id,
-    ).first()
+    
+    existing_resume = db.query(models.Resume).options(
+    joinedload(models.Resume.personal_info),
+    joinedload(models.Resume.skills),
+    joinedload(models.Resume.projects),
+    joinedload(models.Resume.work_experiences),
+    joinedload(models.Resume.educations),
+).filter(
+    models.Resume.file_hash == file_hash,
+    models.Resume.user_id == current_user.id,
+).first()
 
     # Only serve cache if the resume is complete (has a summary)
     if existing_resume and existing_resume.summary:
         print("Returning cached resume")
-        structured_data = schemas.ResumeData.model_validate(existing_resume)
-        structured_data.id = existing_resume.id
-        return structured_data
+        return schemas.ResumeData(
+    id=existing_resume.id,
+    personal_info=existing_resume.personal_info,
+    summary=existing_resume.summary,
+    skills=existing_resume.skills,
+    work_experience=existing_resume.work_experiences,
+    projects=existing_resume.projects,
+    education=existing_resume.educations
+)
 
     raw_text = ""
     if file.content_type == "application/pdf":
