@@ -29,6 +29,8 @@ from pydantic import BaseModel as PydanticBaseModel
 # Initialize scorer (add after app initialization)
 scorer = ResumeScorer()
 
+FRONTEND_URL = "https://resumehub-nsoa8u22x-mohammed-azhans-projects.vercel.app"
+
 
 models.Base.metadata.create_all(bind=engine)
 
@@ -971,7 +973,7 @@ async def create_resume_version(
         "version_name": version.version_name,
         "unique_url":   version.unique_url,
         "created_at":   version.created_at,
-        "share_link":   f"/resume/view/{version.unique_url}"
+        "share_link": f"{FRONTEND_URL}/resume_view.html?url={version.unique_url}"
     }
 
 
@@ -1000,7 +1002,7 @@ def list_resume_versions(
             "version_name": v.version_name,
             "unique_url":   v.unique_url,
             "created_at":   v.created_at,
-            "share_link":   f"/resume/view/{v.unique_url}"
+            "share_link": f"{FRONTEND_URL}/resume_view.html?url={v.unique_url}"
         }
         for v in versions
     ]
@@ -1084,7 +1086,9 @@ def shortlink_redirect(unique_url: str, db: Session = Depends(get_db)):
     ).first()
     if not version:
         raise HTTPException(status_code=404, detail="Resume version not found")
-    return RedirectResponse(url=f"/resume_view.html?url={unique_url}")
+    return RedirectResponse(
+    url=f"{FRONTEND_URL}/resume_view.html?url={unique_url}"
+)
 
 
 
