@@ -1,6 +1,7 @@
 import os
 import json
 import hashlib
+import logging
 import fitz  
 import docx
 from google import genai
@@ -30,6 +31,15 @@ scorer = ResumeScorer()
 
 models.Base.metadata.create_all(bind=engine)
 
+# ── Logging ──────────────────────────────────────────────────────────────────
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
+logger = logging.getLogger("resumeiq")
+
+load_dotenv()
+
 # ── SQLite migration: ensure user_id column exists on resumes table ───────────────
 try:
     with engine.connect() as _conn:
@@ -37,11 +47,29 @@ try:
         if "user_id" not in _existing_cols:
             _conn.execute(text("ALTER TABLE resumes ADD COLUMN user_id INTEGER REFERENCES users(id)"))
             _conn.commit()
-            print("Migration: added user_id column to resumes table")
+            logger.info("Migration: added user_id column to resumes table")
 except Exception as _migration_err:
-    print(f"Migration note: {_migration_err}")
+    logger.warning(f"Migration note: {_migration_err}")
 
-load_dotenv()
+# ── SQLite migration: drop legacy UNIQUE indexes that block multi-user uploads ───
+# SQLAlchemy's unique=True creates named indexes (e.g. ix_resumes_file_hash).
+# We drop them here so existing databases get patched automatically on restart.
+_UNIQUE_INDEXES_TO_DROP = [
+    "ix_resumes_file_hash",
+    "ix_personal_info_email",
+    "ix_personal_info_phone",
+]
+try:
+    with engine.begin() as _conn:
+        for _idx in _UNIQUE_INDEXES_TO_DROP:
+            _conn.execute(text(f"DROP INDEX IF EXISTS {_idx}"))
+        # Re-create as non-unique indexes for query performance
+        _conn.execute(text("CREATE INDEX IF NOT EXISTS ix_resumes_file_hash ON resumes(file_hash)"))
+        _conn.execute(text("CREATE INDEX IF NOT EXISTS ix_personal_info_email ON personal_info(email)"))
+        _conn.execute(text("CREATE INDEX IF NOT EXISTS ix_personal_info_phone ON personal_info(phone)"))
+    logger.info("Migration: unique index constraints checked/patched")
+except Exception as _idx_err:
+    logger.warning(f"Index migration note: {_idx_err}")
 try:
     API_KEY = os.environ["GEMINI_API_KEY"]
 except KeyError:
@@ -54,7 +82,14 @@ if API_KEY == "YOUR_GEMINI_API_KEY":
 gemini_client = genai.Client(api_key=API_KEY) if API_KEY != "YOUR_GEMINI_API_KEY" else None
 
 # ── Auth configuration ─────────────────────────────────────────────────────────────────────────────────
-SECRET_KEY = os.environ.get("SECRET_KEY", "resumeiq-super-secret-key-change-in-production-2024")
+_SECRET_KEY_RAW = os.environ.get("SECRET_KEY")
+if not _SECRET_KEY_RAW:
+    logger.warning(
+        "SECRET_KEY is not set in environment — using insecure default. "
+        "Set SECRET_KEY in your .env file before deploying."
+    )
+    _SECRET_KEY_RAW = "resumeiq-super-secret-key-change-in-production-2024"
+SECRET_KEY = _SECRET_KEY_RAW
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_DAYS = 30
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -209,7 +244,7 @@ STRICT JSON ONLY. NO TEXT.
 async def parse_and_save_resume(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    current_user: Optional[models.User] = Depends(get_optional_current_user)
+    current_user: models.User = Depends(get_current_user)
 ):
 
     if not file.content_type in [
@@ -224,50 +259,57 @@ async def parse_and_save_resume(
     
     file_hash = hashlib.sha256(file_bytes).hexdigest()
 
+    # Cache lookup scoped to this user — prevents cross-user cache collisions
     existing_resume = db.query(models.Resume).filter(
-        models.Resume.file_hash == file_hash
+        models.Resume.file_hash == file_hash,
+        models.Resume.user_id == current_user.id,
     ).first()
 
-    # ✅ Only use cache if summary exists
-    if existing_resume:
+    # Only serve cache if the resume is complete (has a summary)
+    if existing_resume and existing_resume.summary:
         print("Returning cached resume")
-        return schemas.ResumeData.model_validate(existing_resume)
-
+        structured_data = schemas.ResumeData.model_validate(existing_resume)
+        structured_data.id = existing_resume.id
+        return structured_data
 
     raw_text = ""
     if file.content_type == "application/pdf":
         raw_text = extract_text_from_pdf(file_bytes)
     else:
         raw_text = extract_text_from_docx(file_bytes)
-    
+
     if not raw_text.strip():
         raise HTTPException(status_code=400, detail="Could not extract text.")
 
     structured_data = await parse_resume_with_gemini(raw_text)
 
-    # Save to DB with the hash for future caching
-    db_resume = crud.create_or_update_resume(db=db, resume_data=structured_data, file_hash=file_hash)
-    
-    # Ensure ID is included in the response
+    # CRUD owns all DB writes and user_id assignment — no patching in main.py
+    db_resume = crud.create_or_update_resume(
+        db=db,
+        resume_data=structured_data,
+        file_hash=file_hash,
+        user_id=current_user.id,
+    )
+
     structured_data.id = db_resume.id
-
-    # Link resume to the authenticated user if logged in and not already linked
-    if current_user is not None and db_resume.user_id is None:
-        db_resume.user_id = current_user.id
-        db.commit()
-
     return structured_data
 
+
 @app.get("/resumes/{resume_id}", response_model=schemas.ResumeData, tags=["Database"])
-def read_resume(resume_id: int, db: Session = Depends(get_db)):
-    """
-    Retrieve a parsed resume from the database by its ID.
-    """
+def read_resume(
+    resume_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Retrieve a resume by ID. Only the owner may access it."""
     db_resume = db.query(models.Resume).filter(models.Resume.id == resume_id).first()
     if db_resume is None:
         raise HTTPException(status_code=404, detail="Resume not found")
-    
+    if db_resume.user_id != current_user.id:
+        logger.warning(f"Unauthorized access attempt: user {current_user.id} → resume {resume_id}")
+        raise HTTPException(status_code=403, detail="Not authorized to access this resume")
     return schemas.ResumeData(
+        id=db_resume.id,
         personal_info=db_resume.personal_info,
         summary=db_resume.summary,
         skills=db_resume.skills,
@@ -277,22 +319,32 @@ def read_resume(resume_id: int, db: Session = Depends(get_db)):
     )
 
 @app.get("/resumes/search/", response_model=schemas.ResumeData, tags=["Database"])
-def search_resume_by_email(email: str, db: Session = Depends(get_db)):
-    """
-    Retrieve a parsed resume from the database by the candidate's email address.
-    """
-    personal_info = db.query(models.PersonalInfo).filter(models.PersonalInfo.email == email).first()
+def search_resume_by_email(
+    email: str,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Search for a resume by email. Scoped to the authenticated user's own resumes."""
+    personal_info = (
+        db.query(models.PersonalInfo)
+        .join(models.Resume)
+        .filter(
+            models.PersonalInfo.email == email,
+            models.Resume.user_id == current_user.id,
+        )
+        .first()
+    )
     if personal_info is None or personal_info.resume is None:
         raise HTTPException(status_code=404, detail="Resume not found for the provided email")
-    
-    # Convert SQLAlchemy model to Pydantic schema
+    r = personal_info.resume
     return schemas.ResumeData(
+        id=r.id,
         personal_info=personal_info,
-        summary=personal_info.resume.summary,
-        skills=personal_info.resume.skills,
-        work_experience=personal_info.resume.work_experiences,
-        projects=personal_info.resume.projects,
-        education=personal_info.resume.educations
+        summary=r.summary,
+        skills=r.skills,
+        work_experience=r.work_experiences,
+        projects=r.projects,
+        education=r.educations
     )
 
 @app.get("/resumes/", response_model=List[schemas.ResumeData], tags=["Database"])
@@ -319,14 +371,20 @@ def list_all_resumes(
     return result
 
 @app.delete("/resumes/{resume_id}", tags=["Database"])
-def delete_resume_by_id_legacy(resume_id: int, db: Session = Depends(get_db)):
+def delete_resume_by_id_legacy(
+    resume_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
     """
-    Delete a resume from the database by its ID.
+    Delete a resume by ID. Only the owner of the resume can delete it.
+    Requires a valid JWT Bearer token.
     """
     db_resume = db.query(models.Resume).filter(models.Resume.id == resume_id).first()
     if db_resume is None:
         raise HTTPException(status_code=404, detail="Resume not found")
-    
+    if db_resume.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="You do not have permission to delete this resume")
     db.delete(db_resume)
     db.commit()
     return {"message": f"Resume with ID {resume_id} has been deleted successfully"}
@@ -334,11 +392,15 @@ def delete_resume_by_id_legacy(resume_id: int, db: Session = Depends(get_db)):
 
 @app.get("/", tags=["Root"])
 async def read_root():
-    return RedirectResponse(url="/app/landing.html")
+    return RedirectResponse(url="/landing.html")
 
 
 @app.post("/resumes/{resume_id}/analyze", tags=["Analysis"])
-async def analyze_resume(resume_id: int, db: Session = Depends(get_db)):
+async def analyze_resume(
+    resume_id: int, 
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
     """
     Analyze and score an existing resume.
     Returns cached DB score on repeat calls — no Gemini round-trip needed.
@@ -346,6 +408,8 @@ async def analyze_resume(resume_id: int, db: Session = Depends(get_db)):
     db_resume = db.query(models.Resume).filter(models.Resume.id == resume_id).first()
     if not db_resume:
         raise HTTPException(status_code=404, detail="Resume not found")
+    if db_resume.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
 
     existing_score = db.query(models.ResumeScore).filter(
         models.ResumeScore.resume_id == resume_id
@@ -418,7 +482,12 @@ async def create_job_posting(job: schemas.JobPostingCreate, db: Session = Depend
 
 
 @app.post("/match/resume/{resume_id}/job/{job_id}", tags=["Job Matching"])
-async def match_resume_to_job(resume_id: int, job_id: int, db: Session = Depends(get_db)):
+async def match_resume_to_job(
+    resume_id: int, 
+    job_id: int, 
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
     """
     Match a resume to a job posting and calculate compatibility score
     """
@@ -427,6 +496,8 @@ async def match_resume_to_job(resume_id: int, job_id: int, db: Session = Depends
     
     if not resume or not job:
         raise HTTPException(status_code=404, detail="Resume or Job not found")
+    if resume.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
     
     import json
     from datetime import datetime
@@ -461,13 +532,19 @@ async def match_resume_to_job(resume_id: int, job_id: int, db: Session = Depends
     }
 
 @app.get("/resumes/{resume_id}/suggestions", tags=["AI Suggestions"])
-async def get_resume_suggestions(resume_id: int, db: Session = Depends(get_db)):
+async def get_resume_suggestions(
+    resume_id: int, 
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
     """
     Get AI-powered suggestions to improve resume (uses gemini-2.5-flash for speed)
     """
     resume = db.query(models.Resume).filter(models.Resume.id == resume_id).first()
     if not resume:
         raise HTTPException(status_code=404, detail="Resume not found")
+    if resume.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
 
     resume_context = (
         f"Summary: {resume.summary}\n"
@@ -805,7 +882,8 @@ import uuid as _uuid
 async def create_resume_version(
     resume_id: int,
     version_data: dict,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
 ):
     """
     Create a new shareable version snapshot of a resume.
@@ -816,6 +894,8 @@ async def create_resume_version(
     db_resume = db.query(models.Resume).filter(models.Resume.id == resume_id).first()
     if not db_resume:
         raise HTTPException(status_code=404, detail="Resume not found")
+    if db_resume.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
 
     # Generate a collision-safe 8-char unique token
     for _ in range(10):         # retry loop in case of collision (extremely unlikely)
@@ -882,13 +962,19 @@ async def create_resume_version(
 
 
 @app.get("/resumes/{resume_id}/versions", tags=["Versioning"])
-def list_resume_versions(resume_id: int, db: Session = Depends(get_db)):
+def list_resume_versions(
+    resume_id: int, 
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
     """
     List all versions created for a given resume.
     """
     db_resume = db.query(models.Resume).filter(models.Resume.id == resume_id).first()
     if not db_resume:
         raise HTTPException(status_code=404, detail="Resume not found")
+    if db_resume.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
 
     versions = db.query(models.ResumeVersion).filter(
         models.ResumeVersion.resume_id == resume_id
@@ -943,16 +1029,31 @@ def view_resume_version(unique_url: str, db: Session = Depends(get_db)):
 
 
 @app.delete("/resumes/{resume_id}/versions/{version_id}", tags=["Versioning"])
-def delete_resume_version(resume_id: int, version_id: int, db: Session = Depends(get_db)):
+def delete_resume_version(
+    resume_id: int,
+    version_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
     """
-    Delete a specific resume version by ID.
+    Delete a specific resume version by ID. Only the resume owner may delete it.
     """
+    # Verify the parent resume exists and belongs to this user
+    db_resume = db.query(models.Resume).filter(models.Resume.id == resume_id).first()
+    if not db_resume:
+        raise HTTPException(status_code=404, detail="Resume not found")
+    if db_resume.user_id != current_user.id:
+        logger.warning(f"Unauthorized version delete: user {current_user.id} → resume {resume_id}")
+        raise HTTPException(status_code=403, detail="Not authorized")
+
     version = db.query(models.ResumeVersion).filter(
         models.ResumeVersion.id == version_id,
         models.ResumeVersion.resume_id == resume_id
     ).first()
     if not version:
         raise HTTPException(status_code=404, detail="Version not found")
+
+    logger.info(f"Version '{version.version_name}' (id={version_id}) deleted by user {current_user.id}")
     db.delete(version)
     db.commit()
     return {"message": f"Version '{version.version_name}' deleted successfully"}

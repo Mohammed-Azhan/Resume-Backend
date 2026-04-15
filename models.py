@@ -29,7 +29,7 @@ class Resume(Base):
     __tablename__ = "resumes"
     id = Column(Integer, primary_key=True, index=True)
     summary = Column(Text, nullable=True)
-    file_hash = Column(String, nullable=True, unique=True, index=True)  # SHA-256 of raw file bytes for dedup caching
+    file_hash = Column(String, nullable=True, index=True)  # SHA-256 of raw file bytes for dedup caching (per-user)
     
     personal_info = relationship("PersonalInfo", back_populates="resume", uselist=False, cascade="all, delete-orphan")
     skills = relationship("Skill", secondary=resume_skill_association, back_populates="resumes")
@@ -47,8 +47,8 @@ class PersonalInfo(Base):
     id = Column(Integer, primary_key=True, index=True)
     resume_id = Column(Integer, ForeignKey("resumes.id"))
     name = Column(String, index=True)
-    email = Column(String, unique=True, index=True, nullable=True)
-    phone = Column(String, unique=True, index=True, nullable=True)
+    email = Column(String, index=True, nullable=True)
+    phone = Column(String, index=True, nullable=True)
     location = Column(String, nullable=True)
     linkedin_url = Column(String, nullable=True)
     resume = relationship("Resume", back_populates="personal_info")
