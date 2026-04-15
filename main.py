@@ -1070,7 +1070,7 @@ def shortlink_redirect(unique_url: str, db: Session = Depends(get_db)):
     ).first()
     if not version:
         raise HTTPException(status_code=404, detail="Resume version not found")
-    return RedirectResponse(url=f"/app/resume_view.html?url={unique_url}")
+    return RedirectResponse(url=f"/resume_view.html?url={unique_url}")
 
 
 
@@ -1122,7 +1122,7 @@ def get_me(current_user: models.User = Depends(get_current_user)):
 # ── Serve frontend static files ──────────────────────────────────────────────
 # Mount AFTER all API routes so API paths take precedence
 try:
-    app.mount("/app", StaticFiles(directory="resumehub-frontend/public", html=True), name="frontend")
+    app.mount("", StaticFiles(directory="resumehub-frontend/public", html=True), name="frontend")
 except Exception:
     pass  # Skip if directory not found (e.g., in tests)
 
