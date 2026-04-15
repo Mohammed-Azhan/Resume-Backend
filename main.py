@@ -996,19 +996,27 @@ def list_resume_versions(
         models.ResumeVersion.resume_id == resume_id
     ).all()
 
+    def safe_json(text, fallback):
+        if not text:
+            return fallback
+        try:
+            return json.loads(text)
+        except:
+            return fallback
+
     return [
-    {
-        "id": v.id,
-        "version_name": v.version_name,
-        "summary": v.summary,
-        "skills": v.skills,
-        "experience": v.experience,
-        "projects": v.projects,
-        "education": v.education,
-        "unique_url": v.unique_url,
-        "created_at": v.created_at
-    }
-    for v in versions
+{
+    "id": v.id,
+    "version_name": v.version_name,
+    "summary": v.summary,
+    "skills": safe_json(v.skills, []),          # ✅ FIX
+    "experience": safe_json(v.experience, []),  # ✅ FIX
+    "projects": safe_json(v.projects, []),      # ✅ FIX
+    "education": safe_json(v.education, []),    # ✅ FIX
+    "unique_url": v.unique_url,
+    "created_at": v.created_at
+}
+for v in versions
 ]
 
 @app.get("/resume/view/{unique_url}", tags=["Versioning"])
