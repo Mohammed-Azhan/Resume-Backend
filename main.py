@@ -997,16 +997,19 @@ def list_resume_versions(
     ).all()
 
     return [
-        {
-            "id":           v.id,
-            "version_name": v.version_name,
-            "unique_url":   v.unique_url,
-            "created_at":   v.created_at,
-            "share_link": f"{FRONTEND_URL}/resume_view.html?url={v.unique_url}"
-        }
-        for v in versions
-    ]
-
+    {
+        "id": v.id,
+        "version_name": v.version_name,
+        "summary": v.summary,
+        "skills": v.skills,
+        "experience": v.experience,
+        "projects": v.projects,
+        "education": v.education,
+        "unique_url": v.unique_url,
+        "created_at": v.created_at
+    }
+    for v in versions
+]
 
 @app.get("/resume/view/{unique_url}", tags=["Versioning"])
 def view_resume_version(unique_url: str, db: Session = Depends(get_db)):
@@ -1135,6 +1138,9 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
 def get_me(current_user: models.User = Depends(get_current_user)):
     """Return the currently authenticated user's profile."""
     return {"id": current_user.id, "email": current_user.email, "username": current_user.username}
+
+
+
 
 
 @app.put("/resumes/{resume_id}/versions/{version_id}", tags=["Versioning"])
