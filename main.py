@@ -1137,6 +1137,56 @@ def get_me(current_user: models.User = Depends(get_current_user)):
     return {"id": current_user.id, "email": current_user.email, "username": current_user.username}
 
 
+@app.put("/resumes/{resume_id}/versions/{version_id}", tags=["Versioning"])
+def update_resume_version(
+    resume_id: int,
+    version_id: int,
+    updated_data: dict,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    # Check ownership
+    db_resume = db.query(models.Resume).filter(models.Resume.id == resume_id).first()
+    if not db_resume:
+        raise HTTPException(status_code=404, detail="Resume not found")
+
+    if db_resume.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    # Get version
+    version = db.query(models.ResumeVersion).filter(
+        models.ResumeVersion.id == version_id,
+        models.ResumeVersion.resume_id == resume_id
+    ).first()
+
+    if not version:
+        raise HTTPException(status_code=404, detail="Version not found")
+
+    # 🔥 Update fields (only if provided)
+    if "version_name" in updated_data:
+        version.version_name = updated_data["version_name"]
+
+    if "summary" in updated_data:
+        version.summary = updated_data["summary"]
+
+    if "skills" in updated_data:
+        version.skills = updated_data["skills"]
+
+    if "experience" in updated_data:
+        version.experience = updated_data["experience"]
+
+    if "projects" in updated_data:
+        version.projects = updated_data["projects"]
+
+    if "education" in updated_data:
+        version.education = updated_data["education"]
+
+    db.commit()
+    db.refresh(version)
+
+    return {"message": "Version updated successfully"}
+
+
 # ── Serve frontend static files ──────────────────────────────────────────────
 # Mount AFTER all API routes so API paths take precedence
 try:
